@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68.2.0", "wheel>=0.36.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wheeledit"
+version = "0.1.0"
+description = "A tool for editing Python wheel packages"
+readme = "README.md"
+authors = [
+    {name = "Jack Zhou", email = "jackzzs@outlook.com"}
+]
+requires-python = ">=3.6"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/username/wheeledit"
+
+[project.scripts]
+wheeledit = "wheeledit.cli:main" 
