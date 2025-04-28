@@ -68,7 +68,7 @@ def process_wheel(wheel_path, args, is_directory=False):
             # Find the first dash that separates the package name from the version
             parts = wheel_filename.split('-', 1)
             if len(parts) == 2:
-                new_wheel_name = f"{new_name}-{parts[1]}"
+                new_wheel_name = f"{new_name.replace('-', '_')}-{parts[1]}"
                 output_path = wheel_path.parent / new_wheel_name
             else:
                 # Fallback if the wheel name doesn't parse as expected
@@ -120,10 +120,6 @@ def process_wheel(wheel_path, args, is_directory=False):
         # Repackage the wheel
         editor.repackage(output_path)
         return True, output_path
-    except Exception as e:
-        # Cleanup but preserve the error for handling in the caller
-        editor.cleanup()
-        raise
     finally:
         editor.cleanup()
 

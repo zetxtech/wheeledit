@@ -26,9 +26,22 @@ class WheelEditor:
         """
         self.wheel_path = Path(wheel_path)
         self.unpacked_dir = None
-        self.dist_info_dir = None
-        self.original_name = None
-        self.original_metadata = None
+
+    @property
+    def dist_info_dir(self):
+        """
+        Dynamically get the .dist-info directory path.
+        
+        Returns:
+            Path to the .dist-info directory
+        """
+        if self.unpacked_dir is None:
+            return None
+            
+        dist_info_dirs = list(self.unpacked_dir.glob('*.dist-info'))
+        if not dist_info_dirs:
+            raise ValueError("No .dist-info directory found in the wheel")
+        return dist_info_dirs[0]
 
     def unpack(self):
         """
@@ -52,21 +65,6 @@ class WheelEditor:
                 raise ValueError("No subdirectories found after unpacking wheel")
             
             self.unpacked_dir = subdirs[0]  # Use the first subdirectory found
-            
-            # Find the .dist-info directory
-            dist_info_dirs = list(self.unpacked_dir.glob('*.dist-info'))
-            if not dist_info_dirs:
-                raise ValueError("No .dist-info directory found in the wheel")
-            self.dist_info_dir = dist_info_dirs[0]
-            
-            # Store the original package name
-            self.original_name = self.dist_info_dir.name.split('-')[0]
-            
-            # Store original metadata as simple string
-            metadata_path = self.dist_info_dir / 'METADATA'
-            if metadata_path.exists():
-                with open(metadata_path, 'r', encoding='utf-8') as f:
-                    self.original_metadata = f.read()
         
         return self.unpacked_dir
 
@@ -76,59 +74,48 @@ class WheelEditor:
         
         Args:
             new_name: New package name
+        
+        Returns:
+            New package name if successful
+            
+        Raises:
+            ValueError: If the new name is invalid or dist-info directory is not found
         """
+        if not self.validate_package_name(new_name):
+            raise ValueError(f"Invalid package name: '{new_name}'. Package names must contain only ASCII letters, numbers, period, underscore, and hyphen, and must start and end with a letter or number.")
+        
         if self.unpacked_dir is None:
             self.unpack()
         
-        old_name = self.original_name
+        # Get current dist_info_dir
+        old_dist_info = self.dist_info_dir
         
-        # Rename the .dist-info directory
-        new_dist_info_name = self.dist_info_dir.name.replace(old_name, new_name, 1)
-        new_dist_info_path = self.dist_info_dir.parent / new_dist_info_name
-        self.dist_info_dir.rename(new_dist_info_path)
-        self.dist_info_dir = new_dist_info_path
+        if not old_dist_info:
+            raise ValueError("No .dist-info directory found in the wheel")
+        
+        version = ""
+        # Get everything before .dist-info using Path.stem
+        stem = Path(old_dist_info.name).stem
+        if '-' in stem:
+            # Get the version (everything after the last hyphen)
+            version = f"-{stem.split('-')[-1]}"
+        
+        # Rename the .dist-info directory, preserving version
+        new_dist_info_name = f"{new_name.replace('-', '_')}{version}.dist-info"
+        new_dist_info_path = old_dist_info.parent / new_dist_info_name
+        old_dist_info.rename(new_dist_info_path)
         
         # Update METADATA file
-        metadata_path = self.dist_info_dir / 'METADATA'
+        metadata_path = new_dist_info_path / 'METADATA'
         if metadata_path.exists():
             with open(metadata_path, 'r', encoding='utf-8') as f:
                 metadata_content = f.read()
             
-            # Update the Name field
-            metadata_content = metadata_content.replace(f'Name: {old_name}', f'Name: {new_name}')
+            # Update the Name field - keep original format in metadata
+            metadata_content = re.sub(r'Name: .*', f'Name: {new_name}', metadata_content)
             
             with open(metadata_path, 'w', encoding='utf-8') as f:
                 f.write(metadata_content)
-        
-        # Update WHEEL file if it exists
-        wheel_path = self.dist_info_dir / 'WHEEL'
-        if wheel_path.exists():
-            with open(wheel_path, 'r', encoding='utf-8') as f:
-                wheel_content = f.read()
-            
-            # Replace any occurrences of the old name in the wheel content
-            wheel_content = wheel_content.replace(old_name, new_name)
-            
-            with open(wheel_path, 'w', encoding='utf-8') as f:
-                f.write(wheel_content)
-        
-        # Update RECORD file if it exists
-        record_path = self.dist_info_dir / 'RECORD'
-        if record_path.exists():
-            with open(record_path, 'r', encoding='utf-8') as f:
-                record_lines = f.readlines()
-            
-            new_record_lines = []
-            for line in record_lines:
-                # Replace old_name with new_name in all paths
-                new_line = line.replace(f"{old_name}-", f"{new_name}-")
-                new_record_lines.append(new_line)
-            
-            with open(record_path, 'w', encoding='utf-8') as f:
-                f.writelines(new_record_lines)
-        
-        # If there are .py files with the old name, we need to update imports
-        # This is more complex and might need additional logic based on your requirements
         
         return new_name
 
@@ -294,15 +281,19 @@ class WheelEditor:
 
     def get_metadata(self):
         """
-        Get the original metadata of the wheel.
+        Get the metadata of the wheel.
         
         Returns:
-            The original metadata as a string
+            The metadata as a string
         """
         if self.unpacked_dir is None:
             self.unpack()
         
-        return self.original_metadata
+        metadata_path = self.dist_info_dir / 'METADATA'
+        if metadata_path.exists():
+            with open(metadata_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        return None
 
     def cleanup(self):
         """
@@ -311,7 +302,6 @@ class WheelEditor:
         if self.unpacked_dir is not None and self.unpacked_dir.parent.exists():
             shutil.rmtree(self.unpacked_dir.parent)
             self.unpacked_dir = None
-            self.dist_info_dir = None
 
     def repackage(self, output_path=None):
         """
@@ -383,3 +373,27 @@ class WheelEditor:
         with open(record_path, 'w', encoding='utf-8') as f:
             for filepath, hash_val, size in record_data:
                 f.write(f"{filepath},{hash_val},{size}\n")
+
+    def validate_package_name(self, name):
+        """
+        Validate that a package name meets Python packaging standards.
+        
+        Args:
+            name: The package name to validate
+            
+        Returns:
+            bool: True if name is valid, False otherwise
+        """
+        # Check if name is empty
+        if not name:
+            return False
+            
+        # Name must only contain ASCII letters, numbers, period, underscore, and hyphen
+        if not re.match(r'^[a-zA-Z0-9._-]+$', name):
+            return False
+            
+        # Name must start and end with a letter or number
+        if not (name[0].isalnum() and name[-1].isalnum()):
+            return False
+            
+        return True
