@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/username/wheeledit"
+Homepage = "https://github.com/zetxtech/wheeledit"
 
 [project.scripts]
 wheeledit = "wheeledit.cli:main" 
