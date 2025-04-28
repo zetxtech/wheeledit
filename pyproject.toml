@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wheeledit"
-version = "1.0.0"
+version = "1.0.1"
 description = "A tool for editing Python wheel packages"
 readme = "README.md"
 authors = [
